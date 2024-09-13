@@ -4,7 +4,7 @@ const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb"); //mongod
 
 require("dotenv").config();
 const app = express();
-const port = process.env.PORT || 9999;
+const port = process.env.PORT || 9998;
 
 //midlewares
 app.use(
@@ -32,11 +32,14 @@ const client = new MongoClient(uri, {
     deprecationErrors: true,
   },
 });
-
+let submissionsCollection;
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
-    const Collection1 = client.db("AssaignmentCollection").collection("tasks");
+     const Collection1 = client.db("AssaignmentCollection").collection("tasks");
+     submissionsCollection = client
+       .db("AssaignmentCollection")
+       .collection("submit");
 
     //post op
 
@@ -65,10 +68,31 @@ async function run() {
 
     app.get("/tasks/:id", async (req, res) => {
       const id = req.params.id;
-      const assignment = await Collection1.findOne({ _id: new ObjectId(id) });
-      res.send(assignment);
+      console.log("Fetching assignment with ID:", id); // Log the ID
+      const query = { _id: new ObjectId(id) };
+      const result = await Collection1.findOne(query);
+      res.send(result);
+    });
+    // POST route for submitting assignments
+    app.post("/submit", async (req, res) => {
+      const submission = req.body;
+      const submissionDoc = {
+        assignmentId: submission.assignmentId,
+        userEmail: submission.userEmail,
+        pdfLink: submission.pdfLink,
+        quickNote: submission.quickNote,
+        status: "Pending",
+        submissionDate: new Date(),
+      };
+      const result = await submissionsCollection.insertOne(submissionDoc);
+      res.send(result);
     });
 
+    // get data from submission assignment
+    app.get("/submit", async (req, res) => {
+      const result = await submissionsCollection.find().toArray();
+      res.send(result);
+    });
     //delete assaignment
     app.delete("/tasks/:id", async (req, res) => {
       const id = req.params.id;
@@ -93,24 +117,8 @@ async function run() {
           dueDate: task.dueDate,
         },
       };
-      try {
-        const result = await Collection1.updateOne(filter, doc);
-        if (result.modifiedCount > 0) {
-          // Check if modified
-          res.status(200).json({ success: true });
-        } else {
-          res.status(400).json({
-            success: false,
-            message: "No changes were made or failed to update the assignment.",
-          });
-        }
-      } catch (error) {
-        console.error("Update error:", error);
-        res.status(500).json({
-          success: false,
-          message: "An error occurred while updating the assignment.",
-        });
-      }
+      const result = await Collection1.updateOne(filter, doc);
+      res.send(result);
     });
 
     // await client.connect();
