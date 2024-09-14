@@ -36,10 +36,10 @@ let submissionsCollection;
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
-     const Collection1 = client.db("AssaignmentCollection").collection("tasks");
-     submissionsCollection = client
-       .db("AssaignmentCollection")
-       .collection("submit");
+    const Collection1 = client.db("AssaignmentCollection").collection("tasks");
+    submissionsCollection = client
+      .db("AssaignmentCollection")
+      .collection("submit");
 
     //post op
 
@@ -83,6 +83,9 @@ async function run() {
         quickNote: submission.quickNote,
         status: "Pending",
         submissionDate: new Date(),
+        title: submission.title,
+        marks: submission.marks,
+        obtained: submission.obtained,
       };
       const result = await submissionsCollection.insertOne(submissionDoc);
       res.send(result);
@@ -121,6 +124,39 @@ async function run() {
       res.send(result);
     });
 
+    //pending assignments
+    app.get("/submissions/pending", async (req, res) => {
+      const query = { status: "Pending" };
+      const pendingAssignments = await submissionsCollection
+        .find(query)
+        .toArray();
+      res.send(pendingAssignments);
+    });
+    app.get("/submit/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await submissionsCollection.findOne(query);
+      res.send(result);
+    });
+
+    //update submitted assignment with feedback and obtainded marks
+    app.put("/submissions/:id", async (req, res) => {
+      const id = req.params.id;
+      const { obtained_marks, feedback } = req.body;
+      const query = { _id: new ObjectId(id) };
+      const updateDoc = {
+        $set: {
+          obtained_marks: obtained_marks,
+          feedback: feedback,
+          status: "Completed", // Change status to "Completed"
+        },
+      };
+      const result = await submissionsCollection.updateOne(query, updateDoc);
+      res.send(result);
+    });
+
+
+    
     // await client.connect();
     // Send a ping to confirm a successful connection
     // await client.db("admin").command({ ping: 1 });
