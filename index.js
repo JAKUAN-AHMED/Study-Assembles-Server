@@ -1,7 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb"); //mongodb
-
+const jwt = require("jsonwebtoken");
 require("dotenv").config();
 const app = express();
 const port = process.env.PORT || 9998;
@@ -21,8 +21,7 @@ app.get("/", (req, res) => {
 
 //db set up
 
-const uri =
-  "mongodb+srv://Aesthetic:CC5rGJA3OYr1jToU@cluster0.z5rmhar.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
+const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.z5rmhar.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
@@ -41,8 +40,30 @@ async function run() {
       .db("AssaignmentCollection")
       .collection("submit");
 
-    //post op
+    //*auth related api
+    app.post("/jwt", async (req, res) => {
+      const user = req.body;
+      console.log("user for token", user);
+      const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
+        expiresIn: "1h",
+      });
+      const cookieOptions = {
+        httpOnly: true,
+        secure: true,
+        sameSite: "strict",
+      };
+      res.cookie("token", token, cookieOptions).send({ success: true });
+    });
 
+    //logout
+    app.post("/logout", async (req, res) => {
+      const user = req.body;
+      console.log("logging out user", user);
+      res.clearCookie("token", { maxAge: 0 }).send({ success: true });
+    });
+
+    //*Service relatd api
+    //post op
     app.post("/tasks", async (req, res) => {
       const task = req.body;
       const doc = {
@@ -90,12 +111,21 @@ async function run() {
       const result = await submissionsCollection.insertOne(submissionDoc);
       res.send(result);
     });
-
-    // get data from submission assignment
     app.get("/submit", async (req, res) => {
-      const result = await submissionsCollection.find().toArray();
+      const userEmail = req.query.userEmail;
+      const query = { userEmail: userEmail }; // Filter by userEmail
+      const result = await submissionsCollection.find(query).toArray();
       res.send(result);
     });
+    
+    //sumit by email
+    app.get("/submit/:email", async (req, res) => {
+      const userEmail = req.params.email;
+      const query = { userEmail };
+      const userAssignments = await submissionsCollection.find(query).toArray();
+      res.send(userAssignments);
+    });
+
     //delete assaignment
     app.delete("/tasks/:id", async (req, res) => {
       const id = req.params.id;
@@ -121,7 +151,11 @@ async function run() {
         },
       };
       const result = await Collection1.updateOne(filter, doc);
-      res.send(result);
+      if (result.modifiedCount > 0) {
+        res.status(200).json({ success: true, message: "Update successful" });
+      } else {
+        res.status(400).json({ success: false, message: "Update failed" });
+      }
     });
 
     //pending assignments
@@ -148,15 +182,13 @@ async function run() {
         $set: {
           obtained_marks: obtained_marks,
           feedback: feedback,
-          status: "Completed", // Change status to "Completed"
+          status: "Completed",
         },
       };
       const result = await submissionsCollection.updateOne(query, updateDoc);
       res.send(result);
     });
 
-
-    
     // await client.connect();
     // Send a ping to confirm a successful connection
     // await client.db("admin").command({ ping: 1 });
