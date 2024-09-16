@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb"); //mongodb
 const jwt = require("jsonwebtoken");
+const cookieParser = require("cookie-parser");
 require("dotenv").config();
 const app = express();
 const port = process.env.PORT || 9998;
@@ -14,6 +15,7 @@ app.use(
   })
 );
 app.use(express.json());
+app.use(cookieParser());
 
 app.get("/", (req, res) => {
   res.send("This is Study Assembles");
@@ -31,6 +33,33 @@ const client = new MongoClient(uri, {
     deprecationErrors: true,
   },
 });
+
+//own middlewares
+const logger = (req, res, next) => {
+  console.log("log:info :", req.method, req.url);
+  next();
+};
+
+//verify token
+const verifyToken = (req, res, next) => {
+  const token = req.cookies.token;
+  console.log("Token in middleware:", token);
+
+  if (!token) {
+    return res.status(401).send({ message: "Unauthorized access" });
+  }
+
+  jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
+    if (err) {
+      console.error("Token verification error:", err);
+      return res.status(401).send({ message: "Unauthorized access" });
+    }
+    req.user = decoded;
+    next();
+  });
+};
+
+
 let submissionsCollection;
 async function run() {
   try {
@@ -49,7 +78,7 @@ async function run() {
       });
       const cookieOptions = {
         httpOnly: true,
-        secure: true,
+        secure: false,
         sameSite: "strict",
       };
       res.cookie("token", token, cookieOptions).send({ success: true });
@@ -82,7 +111,8 @@ async function run() {
 
     //get op
 
-    app.get("/tasks", async (req, res) => {
+    app.get("/tasks",async (req, res) => {
+       console.log('token owner info- : ',req.user);
       const result = await Collection1.find().toArray();
       res.send(result);
     });
@@ -111,13 +141,18 @@ async function run() {
       const result = await submissionsCollection.insertOne(submissionDoc);
       res.send(result);
     });
-    app.get("/submit", async (req, res) => {
+
+    app.get("/submit", verifyToken, async (req, res) => {
       const userEmail = req.query.userEmail;
+      console.log('token owner info',req.user)
+      if(userEmail!=req.user.email){
+        return res.status(403).send({message:'forbidded access'});
+      }
       const query = { userEmail: userEmail }; // Filter by userEmail
       const result = await submissionsCollection.find(query).toArray();
       res.send(result);
     });
-    
+
     //sumit by email
     app.get("/submit/:email", async (req, res) => {
       const userEmail = req.params.email;
@@ -166,7 +201,7 @@ async function run() {
         .toArray();
       res.send(pendingAssignments);
     });
-    app.get("/submit/:id", async (req, res) => {
+    app.get("/submit/:id", logger, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await submissionsCollection.findOne(query);
