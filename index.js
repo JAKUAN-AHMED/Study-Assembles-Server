@@ -10,16 +10,16 @@ const port = process.env.PORT || 9998;
 //midlewares
 app.use(
   cors({
-    origin: ["http://localhost:5173"],
+    origin: [
+      "http://localhost:5173",
+      "https://study-assembles.web.app",
+      "https://study-assembles.firebaseapp.com",
+    ],
     credentials: true,
   })
 );
 app.use(express.json());
 app.use(cookieParser());
-
-app.get("/", (req, res) => {
-  res.send("This is Study Assembles");
-});
 
 //db set up
 
@@ -59,7 +59,6 @@ const verifyToken = (req, res, next) => {
   });
 };
 
-
 let submissionsCollection;
 async function run() {
   try {
@@ -68,7 +67,9 @@ async function run() {
     submissionsCollection = client
       .db("AssaignmentCollection")
       .collection("submit");
-
+    app.get("/", (req, res) => {
+      res.send("hello world!");
+    });
     //*auth related api
     app.post("/jwt", async (req, res) => {
       const user = req.body;
@@ -78,10 +79,12 @@ async function run() {
       });
       const cookieOptions = {
         httpOnly: true,
-        secure: false,
-        sameSite: "strict",
+        secure: process.env.NODE_ENV === "production",
+        sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
       };
-      res.cookie("token", token, cookieOptions).send({ success: true });
+      res
+        .cookie("token", token, { ...cookieOptions, maxAge: 0 })
+        .send({ success: true });
     });
 
     //logout
@@ -111,8 +114,8 @@ async function run() {
 
     //get op
 
-    app.get("/tasks",async (req, res) => {
-       console.log('token owner info- : ',req.user);
+    app.get("/tasks", async (req, res) => {
+      console.log("token owner info- : ", req.user);
       const result = await Collection1.find().toArray();
       res.send(result);
     });
@@ -144,9 +147,9 @@ async function run() {
 
     app.get("/submit", verifyToken, async (req, res) => {
       const userEmail = req.query.userEmail;
-      console.log('token owner info',req.user)
-      if(userEmail!=req.user.email){
-        return res.status(403).send({message:'forbidded access'});
+      console.log("token owner info", req.user);
+      if (userEmail != req.user.email) {
+        return res.status(403).send({ message: "forbidded access" });
       }
       const query = { userEmail: userEmail }; // Filter by userEmail
       const result = await submissionsCollection.find(query).toArray();
